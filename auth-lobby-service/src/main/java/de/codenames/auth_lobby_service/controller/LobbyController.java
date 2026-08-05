@@ -1,6 +1,5 @@
 package de.codenames.auth_lobby_service.controller;
 
-import de.codenames.auth_lobby_service.security.service.TokenService;
 import de.codenames.auth_lobby_service.dto.request.CreateLobbyRequest;
 import de.codenames.auth_lobby_service.dto.response.LobbyResponse;
 import de.codenames.auth_lobby_service.model.Lobby;
@@ -11,8 +10,10 @@ import de.codenames.auth_lobby_service.repository.PlayerRepository;
 import de.codenames.auth_lobby_service.dto.response.PlayerResponse;
 import de.codenames.auth_lobby_service.model.User;
 import de.codenames.auth_lobby_service.repository.UserRepository;
+import de.codenames.auth_lobby_service.security.service.UserDetailsImpl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,25 +25,20 @@ import java.util.Optional;
 @RequestMapping("/api/lobbies")
 public class LobbyController {
     private final LobbyRepository lobbyRepository;
-    private final TokenService tokenService;
     private final UserRepository userRepository;
     private final PlayerRepository playerRepository;
 
 
-    public LobbyController(LobbyRepository lobbyRepository, TokenService tokenService, UserRepository userRepository, PlayerRepository playerRepository) {
+    public LobbyController(LobbyRepository lobbyRepository, UserRepository userRepository, PlayerRepository playerRepository) {
         this.lobbyRepository = lobbyRepository;
-        this.tokenService = tokenService;
         this.userRepository = userRepository;
         this.playerRepository = playerRepository;
     }
 
     @PostMapping
-    public ResponseEntity<LobbyResponse> createLobby(@RequestHeader("Authorization") String token, @RequestBody CreateLobbyRequest request) {
-        Optional<Long> foundUserId = tokenService.getUserId(token);
-        if (foundUserId.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        }
-        Long userId = foundUserId.get();
+    public ResponseEntity<LobbyResponse> createLobby(Authentication authentication, @RequestBody CreateLobbyRequest request) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Long userId = userDetails.getId();
 
         Optional<User> foundUser = userRepository.findById(userId);
         if (foundUser.isEmpty()) {
@@ -71,13 +67,9 @@ public class LobbyController {
     }
 
     @PostMapping("/{lobbyId}/join")
-    public ResponseEntity<PlayerResponse> joinLobby(@PathVariable Long lobbyId, @RequestHeader("Authorization") String token) {
-        // 1. Token prüfen -> userId (wie bei createLobby, expliziter if/get-Stil)
-        Optional<Long> foundUserId = tokenService.getUserId(token);
-        if (foundUserId.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        }
-        Long userId = foundUserId.get();
+    public ResponseEntity<PlayerResponse> joinLobby(@PathVariable Long lobbyId, Authentication authentication) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Long userId = userDetails.getId();
         // 2. User laden (wie bei createLobby)
         Optional<User> foundUser = userRepository.findById(userId);
         if (foundUser.isEmpty()) {
