@@ -8,4 +8,4 @@ import de.codenames.auth_lobby_service.model.PlayerRole;
  * (vermeidet, sensible {@link de.codenames.auth_lobby_service.model.User}-Daten wie
  * den Passwort-Hash über die {@code createdBy}/{@code user}-Beziehung mit auszuliefern).
  */
-public record PlayerResponse(Long id, String username, PlayerRole playerRole) {}
+public record PlayerResponse(Long id, Long userId, String username, PlayerRole playerRole) {}

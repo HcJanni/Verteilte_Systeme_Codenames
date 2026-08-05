@@ -79,7 +79,7 @@ public class LobbyController {
         List<Player> players = playerRepository.findByLobby(foundLobby.get());
         List<PlayerResponse> response = new ArrayList<>();
         for (Player player : players) {
-            PlayerResponse playerResponse = new PlayerResponse(player.getId(), player.getUser().getUsername(), player.getPlayerRole());
+            PlayerResponse playerResponse = new PlayerResponse(player.getId(), player.getUser().getId(), player.getUser().getUsername(), player.getPlayerRole());
             response.add(playerResponse);
         }
         return ResponseEntity.ok(response);
@@ -109,7 +109,7 @@ public class LobbyController {
         // 5. playerRepository.save(...)
         playerRepository.save(player);
         // 6. passenden Status zurückgeben
-        return ResponseEntity.ok(new PlayerResponse(player.getId(), player.getUser().getUsername(), player.getPlayerRole()));
+        return ResponseEntity.ok(new PlayerResponse(player.getId(), player.getUser().getId(), player.getUser().getUsername(), player.getPlayerRole()));
     }
 
     @PostMapping("/{lobbyId}/result")
