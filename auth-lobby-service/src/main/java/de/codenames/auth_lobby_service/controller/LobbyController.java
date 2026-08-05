@@ -131,4 +131,33 @@ public class LobbyController {
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
+
+    @GetMapping("/{lobbyId}/stats")
+    public ResponseEntity<de.codenames.auth_lobby_service.dto.response.LobbyStatsResponse> getLobbyStats(@PathVariable Long lobbyId) {
+
+        Optional<Lobby> foundLobby = lobbyRepository.findById(lobbyId);
+        if (foundLobby.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lobby nicht gefunden");
+        }
+
+        List<GameHistory> history = gameHistoryRepository.findByLobby(foundLobby.get());
+
+        int wins = 0;
+        int losses = 0;
+        int assassinLosses = 0;
+
+        // Iteriere durch die Historie und zähle die Ergebnisse
+        for (GameHistory game : history) {
+            if (game.getGameOutcome() == GameOutcome.WIN) {
+                wins++;
+            } else if (game.getGameOutcome() == GameOutcome.LOSS) {
+                losses++;
+            } else if (game.getGameOutcome() == GameOutcome.ASSASSIN_LOSS) {
+                assassinLosses++;
+            }
+        }
+
+        // Rückgabe des neuen DTOs
+        return ResponseEntity.ok(new de.codenames.auth_lobby_service.dto.response.LobbyStatsResponse(wins, losses, assassinLosses));
+    }
 }

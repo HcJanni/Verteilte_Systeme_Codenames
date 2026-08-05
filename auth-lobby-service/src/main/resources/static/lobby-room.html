@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codenames - Warteraum</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app-container lobby-size">
+    <h2 class="lobby-header">Warteraum <span id="room-name"></span></h2>
+
+    <div class="padding-container">
+        <h3>Lobby-Statistik</h3>
+        <div class="stats-box" id="stats-container">
+            Lade Statistiken...
+        </div>
+
+        <h3>Spieler in der Lobby</h3>
+        <div id="players-container">
+            Lade Spieler...
+        </div>
+
+        <button id="start-game-btn" style="margin-top: 20px;" disabled>Warte auf Spieler...</button>
+        <button id="leave-room-btn" class="btn-danger" style="float: none; margin-top: 10px;">Lobby verlassen</button>
+    </div>
+</div>
+
+<script>
+
+    const statsContainer = document.getElementById('stats-container');
+    const playersContainer = document.getElementById('players-container');
+    const startGameBtn = document.getElementById('start-game-btn');
+    const leaveRoomBtn = document.getElementById('leave-room-btn');
+    const roomNameSpan = document.getElementById('room-name');
+
+    // IDs und Token aus dem Browser-Speicher laden
+    const currentLobbyId = localStorage.getItem('currentLobbyId');
+    const token = localStorage.getItem('token');
+    const myUserId = parseInt(localStorage.getItem('userId'), 10);
+
+    if (!token || !currentLobbyId) {
+        window.location.href = "index.html"; // Zurück zum Login, falls Daten fehlen
+    }
+
+    function renderStats(stats) {
+        statsContainer.innerHTML = `
+            <div class="stat-item">
+                <span>Siege</span>
+                <span class="stat-value">${stats.wins}</span>
+            </div>
+            <div class="stat-item">
+                <span>Fehlschläge</span>
+                <span class="stat-value loss">${stats.losses}</span>
+            </div>
+            <div class="stat-item">
+                <span>Attentäter</span>
+                <span class="stat-value assassin">${stats.assassinLosses}</span>
+            </div>
+        `;
+    }
+
+    function renderPlayers(players) {
+        playersContainer.innerHTML = '';
+        players.forEach(player => {
+            const isMe = player.userId === myUserId;
+            const div = document.createElement('div');
+            div.className = 'player-row';
+            div.innerHTML = `
+                <div><strong>${player.username}</strong> ${isMe ? '(Du)' : ''}</div>
+                <div style="color: #666; font-size: 14px;">Beigetreten</div>
+            `;
+            playersContainer.appendChild(div);
+        });
+
+        if (players.length === 2) {
+            startGameBtn.disabled = false;
+            startGameBtn.style.opacity = 1;
+            startGameBtn.innerText = "Spiel starten!";
+        } else {
+            startGameBtn.disabled = true;
+            startGameBtn.style.opacity = 0.5;
+            startGameBtn.innerText = `Warte auf Spieler... (${players.length}/2)`;
+        }
+    }
+
+    async function fetchLobbyData() {
+        const headers = {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+        };
+
+        try {
+            roomNameSpan.innerText = `(ID: ${currentLobbyId})`;
+
+            // Hole Lobby-Statistik
+            const statsRes = await fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/stats`, { headers });
+            if (statsRes.ok) {
+                const stats = await statsRes.json();
+                renderStats(stats);
+            } else {
+                statsContainer.innerHTML = '<span style="color: red;">Fehler beim Laden der Statistik</span>';
+            }
+
+            // Hole Spielerliste
+            const playersRes = await fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/players`, { headers });
+            if (playersRes.ok) {
+                const players = await playersRes.json();
+                renderPlayers(players);
+            } else {
+                playersContainer.innerHTML = '<span style="color: red;">Fehler beim Laden der Spieler</span>';
+            }
+        } catch (err) {
+            console.error("Fehler beim Laden der Lobby-Daten:", err);
+        }
+    }
+
+    // Navigation
+    startGameBtn.addEventListener('click', () => {
+        // Später POST /api/games/{lobbyId}/start, dann:
+        window.location.href = "game.html";
+    });
+
+    leaveRoomBtn.addEventListener('click', () => {
+        // Später DELETE Request zum Verlassen, dann:
+        localStorage.removeItem('currentLobbyId');
+        window.location.href = "lobby.html";
+    });
+
+    // Beim Laden der Seite Daten abrufen
+    fetchLobbyData();
+
+    // Polling (optional): Aktualisiert die Spielerliste alle 3 Sekunden, um zu sehen, wenn jemand beitritt
+    setInterval(fetchLobbyData, 3000);
+
+</script>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Codenames - Lobbys</title>
     <link rel="stylesheet" href="css/style.css">
@@ -9,10 +10,10 @@
 
 <div class="app-container lobby-size">
     <button class="btn-auto btn-danger" id="logout-btn">Logout</button>
-    <h2>Offene Lobbys</h2>
+    <h2 class="lobby-header">Offene Lobbys</h2>
 
     <div id="lobby-list">
-        <!-- Lobbys werden hier per JavaScript generiert -->
+        Lade Lobbys...
     </div>
 
     <div class="create-section">
@@ -27,25 +28,46 @@
 </div>
 
 <script>
-    // --- MOCK DATEN (Später durch fetch() ersetzen) ---
-    let mockLobbies = [
-        { id: 1, name: "Freitagsrunde", status: "OPEN", gameMode: "CLASSIC" },
-        { id: 2, name: "Profis only", status: "OPEN", gameMode: "DUET" }
-    ];
-
     const lobbyListContainer = document.getElementById('lobby-list');
     const createBtn = document.getElementById('create-btn');
     const logoutBtn = document.getElementById('logout-btn');
 
-    function renderLobbies() {
+    // Token aus dem Login überprüfen
+    const token = localStorage.getItem('token');
+    if (!token) {
+        window.location.href = "index.html"; // Zurück zum Login, falls kein Token existiert
+    }
+
+    // --- ECHTE DATEN LADEN ---
+    async function loadLobbies() {
+        try {
+            const res = await fetch('http://localhost:8081/api/lobbies', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                const lobbies = await res.json();
+                renderLobbies(lobbies);
+            } else {
+                lobbyListContainer.innerHTML = '<p style="color: red;">Fehler beim Laden der Lobbys.</p>';
+            }
+        } catch (err) {
+            console.error("Netzwerkfehler:", err);
+            lobbyListContainer.innerHTML = '<p style="color: red;">Backend nicht erreichbar.</p>';
+        }
+    }
+
+    // --- UI RENDERN ---
+    function renderLobbies(lobbies) {
         lobbyListContainer.innerHTML = '';
 
-        if (mockLobbies.length === 0) {
+        if (lobbies.length === 0) {
             lobbyListContainer.innerHTML = '<p>Aktuell keine offenen Lobbys.</p>';
             return;
         }
 
-        mockLobbies.forEach(lobby => {
+        lobbies.forEach(lobby => {
             const div = document.createElement('div');
             div.className = 'lobby-item';
             div.innerHTML = `
@@ -59,15 +81,29 @@
         });
     }
 
-    // Lobby beitreten (Mock)
-    window.joinLobby = function(id) {
-        console.log(`Beitreten zu Lobby ID: ${id}`);
-        alert(`Du würdest jetzt Lobby ${id} beitreten. Hier folgt später der Wechsel auf das Spielfeld.`);
-        // Später: fetch('/api/lobbies/' + id + '/join', { method: 'POST' ... })
+    // --- LOBBY BEITRETEN ---
+    window.joinLobby = async function(id) {
+        // ID für den Warteraum merken
+        localStorage.setItem('currentLobbyId', id);
+
+        try {
+            const res = await fetch(`http://localhost:8081/api/lobbies/${id}/join`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                window.location.href = "lobby-room.html";
+            } else {
+                alert("Fehler beim Beitreten der Lobby. Womöglich bist du bereits beigetreten.");
+            }
+        } catch (err) {
+            console.error(err);
+        }
     };
 
-    // Lobby erstellen (Mock)
-    createBtn.addEventListener('click', () => {
+    // --- LOBBY ERSTELLEN ---
+    createBtn.addEventListener('click', async () => {
         const name = document.getElementById('new-lobby-name').value;
         const gameMode = document.getElementById('new-lobby-mode').value;
 
@@ -76,27 +112,39 @@
             return;
         }
 
-        const newLobby = {
-            id: Date.now(), // Temporäre Dummy-ID
-            name: name,
-            status: "OPEN",
-            gameMode: gameMode
-        };
+        try {
+            const res = await fetch('http://localhost:8081/api/lobbies', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name: name, gameMode: gameMode })
+            });
 
-        mockLobbies.push(newLobby);
-        renderLobbies();
-        document.getElementById('new-lobby-name').value = '';
-
-        // Später: fetch('/api/lobbies', { method: 'POST', body: JSON.stringify({name, gameMode}) ... })
+            if (res.ok) {
+                document.getElementById('new-lobby-name').value = '';
+                loadLobbies(); // Liste sofort aktualisieren
+            } else {
+                alert("Fehler beim Erstellen. Ist der Name evtl. schon vergeben?");
+            }
+        } catch (err) {
+            console.error(err);
+        }
     });
 
-    // Logout Dummy
+    // --- LOGOUT ---
     logoutBtn.addEventListener('click', () => {
-        // Später: fetch('/api/auth/signout', { method: 'POST' ... })
+        localStorage.removeItem('token');
+        localStorage.removeItem('userId');
         window.location.href = "index.html";
     });
 
-    renderLobbies();
+    // Initiales Laden
+    loadLobbies();
+
+    // Automatisches Neuladen alle 3 Sekunden
+    setInterval(loadLobbies, 3000);
 
 </script>
 
