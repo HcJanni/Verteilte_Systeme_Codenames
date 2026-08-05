@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codenames - Spiel</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app-container game-size">
+    <div class="game-header">
+        <h2 style="margin: 0;">Lobby: <span id="lobby-name-display">Wird geladen...</span></h2>
+        <button class="btn-auto btn-danger" id="leave-btn">Verlassen</button>
+    </div>
+
+    <div id="game-grid" class="grid-container">
+        <!-- Karten werden hier per JS generiert -->
+    </div>
+</div>
+
+<script>
+    const gameGrid = document.getElementById('game-grid');
+    const leaveBtn = document.getElementById('leave-btn');
+    document.getElementById('lobby-name-display').innerText = "Freitagsrunde (Mock)";
+
+    // --- MOCK DATEN: Entspricht dem CardView-Record aus dem Backend ---
+    const mockCards = [];
+    const dummyWords = ["Apfel", "Berg", "Katze", "Draht", "Elefant", "Fluss", "Fenster", "Hammer", "Insel", "Jacke",
+        "Kerze", "Lampe", "Messer", "Nadel", "Orange", "Pferd", "Quelle", "Reifen", "Sonne", "Teller",
+        "Uhr", "Vogel", "Wald", "Zug", "Brille"];
+
+    // Wir generieren 25 Mock-Karten
+    for(let i = 0; i < 25; i++) {
+        let type = "BYSTANDER";
+        if(i < 9) type = "AGENT";
+        if(i === 24) type = "ASSASSIN";
+
+        mockCards.push({
+            word: dummyWords[i],
+            position: i,
+            revealed: false,
+            myType: type, // Das ist die Rolle, die der aktuelle Spieler (Viewer) sieht
+            otherType: null
+        });
+    }
+
+    // Damit das Grid nicht sortiert aussieht, mischen wir die Mock-Daten (Fisher-Yates Shuffle)
+    for (let i = mockCards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [mockCards[i], mockCards[j]] = [mockCards[j], mockCards[i]];
+        // Positionen im Array anpassen
+        mockCards[i].position = i;
+        mockCards[j].position = j;
+    }
+
+    // Grid rendern
+    function renderGrid() {
+        gameGrid.innerHTML = '';
+
+        mockCards.forEach(card => {
+            const cardDiv = document.createElement('div');
+            cardDiv.className = `card type-${card.myType}`;
+
+            if(card.revealed) {
+                cardDiv.classList.add('revealed');
+            }
+
+            cardDiv.innerText = card.word;
+
+            // Klick-Event für Reveal-Request
+            cardDiv.addEventListener('click', () => {
+                if(!card.revealed) {
+                    revealCard(card.position);
+                }
+            });
+
+            gameGrid.appendChild(cardDiv);
+        });
+    }
+
+    // Karte aufdecken (Simuliert den POST /api/games/{lobbyId}/reveal Request)
+    function revealCard(position) {
+        console.log(`Sende Reveal-Request für Position: ${position}`);
+        // Mock-Logik: Wir ändern den Zustand lokal
+        mockCards[position].revealed = true;
+        renderGrid();
+
+        // Später: fetch('/api/games/1/reveal', { method: 'POST', body: JSON.stringify({position}) ... })
+    }
+
+    // Spiel verlassen
+    leaveBtn.addEventListener('click', () => {
+        window.location.href = "lobby.html";
+    });
+
+    // Initiales Rendern
+    renderGrid();
+</script>
+
+</body>
+</html>
