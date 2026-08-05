@@ -80,11 +80,12 @@
                 credentials: 'include'
             });
 
-            const data = await response.json();
-
             if (response.ok) {
                 messageSpan.style.color = "green";
                 if (isLogin) {
+                    const data = await response.json();
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('userId', data.userId);
                     messageSpan.innerText = "Erfolgreich!";
                     window.location.href = "lobby.html";
                 } else {
@@ -93,7 +94,7 @@
                 }
             } else {
                 messageSpan.style.color = "red";
-                messageSpan.innerText = data.message || "Fehler aufgetreten.";
+                messageSpan.innerText = "Fehler aufgetreten.";
             }
         } catch (error) {
             messageSpan.style.color = "red";

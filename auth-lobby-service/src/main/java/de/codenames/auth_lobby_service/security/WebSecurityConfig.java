@@ -67,6 +67,7 @@ public class WebSecurityConfig {
                                 .requestMatchers("/error").permitAll()
                                 .requestMatchers("/api/lobbies/*/result").permitAll()
                                 .requestMatchers("/h2-console/**").permitAll()
+                                .requestMatchers("/", "/*.html", "/css/**").permitAll()
                                 .anyRequest().authenticated()
                 );
 
