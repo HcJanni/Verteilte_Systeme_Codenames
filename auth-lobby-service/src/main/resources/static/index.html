@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codenames - Login</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app-container login-size">
+    <h2 id="form-title">Codenames Web</h2>
+
+    <form id="auth-form">
+        <div class="padding-container">
+            <label for="username"><b>Username</b></label>
+            <input type="text" placeholder="Username eingeben" id="username" required>
+
+            <div id="email-container" class="hidden">
+                <label for="email"><b>E-Mail</b></label>
+                <input type="email" placeholder="E-Mail eingeben" id="email">
+            </div>
+
+            <label for="password"><b>Passwort</b></label>
+            <input type="password" placeholder="Passwort eingeben" id="password" required>
+
+            <button type="submit" id="submit-btn">Login</button>
+        </div>
+
+        <div class="footer-container">
+            <button type="button" class="btn-auto btn-secondary" id="toggle-btn">Account erstellen</button>
+            <span class="message-area" id="message"></span>
+        </div>
+    </form>
+</div>
+
+<script>
+    const authForm = document.getElementById('auth-form');
+    const toggleBtn = document.getElementById('toggle-btn');
+    const formTitle = document.getElementById('form-title');
+    const emailContainer = document.getElementById('email-container');
+    const emailInput = document.getElementById('email');
+    const submitBtn = document.getElementById('submit-btn');
+    const messageSpan = document.getElementById('message');
+
+    let isLogin = true;
+
+    toggleBtn.addEventListener('click', () => {
+        isLogin = !isLogin;
+        if (isLogin) {
+            formTitle.innerText = "Codenames Web";
+            emailContainer.classList.add("hidden");
+            emailInput.required = false;
+            submitBtn.innerText = "Login";
+            toggleBtn.innerText = "Account erstellen";
+        } else {
+            formTitle.innerText = "Registrierung";
+            emailContainer.classList.remove("hidden");
+            emailInput.required = true;
+            submitBtn.innerText = "Registrieren";
+            toggleBtn.innerText = "Zurück zum Login";
+        }
+        messageSpan.innerText = "";
+    });
+
+    authForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const email = emailInput.value;
+
+        const endpoint = isLogin ? '/api/auth/signin' : '/api/auth/signup';
+        const payload = isLogin ? { username, password } : { username, password, email };
+
+        try {
+            const response = await fetch('http://localhost:8081' + endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                messageSpan.style.color = "green";
+                if (isLogin) {
+                    messageSpan.innerText = "Erfolgreich!";
+                    window.location.href = "lobby.html";
+                } else {
+                    messageSpan.innerText = "Registriert! Bitte einloggen.";
+                    toggleBtn.click();
+                }
+            } else {
+                messageSpan.style.color = "red";
+                messageSpan.innerText = data.message || "Fehler aufgetreten.";
+            }
+        } catch (error) {
+            messageSpan.style.color = "red";
+            messageSpan.innerText = "Server nicht erreichbar.";
+        }
+    });
+</script>
+
+</body>
+</html>
