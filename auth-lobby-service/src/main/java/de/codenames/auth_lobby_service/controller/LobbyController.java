@@ -1,14 +1,13 @@
 package de.codenames.auth_lobby_service.controller;
 
 import de.codenames.auth_lobby_service.dto.request.CreateLobbyRequest;
+import de.codenames.auth_lobby_service.dto.request.ReportResultRequest;
 import de.codenames.auth_lobby_service.dto.response.LobbyResponse;
-import de.codenames.auth_lobby_service.model.Lobby;
-import de.codenames.auth_lobby_service.model.LobbyStatus;
-import de.codenames.auth_lobby_service.model.Player;
+import de.codenames.auth_lobby_service.model.*;
+import de.codenames.auth_lobby_service.repository.GameHistoryRepository;
 import de.codenames.auth_lobby_service.repository.LobbyRepository;
 import de.codenames.auth_lobby_service.repository.PlayerRepository;
 import de.codenames.auth_lobby_service.dto.response.PlayerResponse;
-import de.codenames.auth_lobby_service.model.User;
 import de.codenames.auth_lobby_service.repository.UserRepository;
 import de.codenames.auth_lobby_service.security.service.UserDetailsImpl;
 import org.springframework.http.HttpStatus;
@@ -17,6 +16,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -27,12 +27,14 @@ public class LobbyController {
     private final LobbyRepository lobbyRepository;
     private final UserRepository userRepository;
     private final PlayerRepository playerRepository;
+    private final GameHistoryRepository gameHistoryRepository;
 
 
-    public LobbyController(LobbyRepository lobbyRepository, UserRepository userRepository, PlayerRepository playerRepository) {
+    public LobbyController(LobbyRepository lobbyRepository, UserRepository userRepository, PlayerRepository playerRepository, GameHistoryRepository gameHistoryRepository) {
         this.lobbyRepository = lobbyRepository;
         this.userRepository = userRepository;
         this.playerRepository = playerRepository;
+        this.gameHistoryRepository = gameHistoryRepository;
     }
 
     @PostMapping
@@ -66,6 +68,21 @@ public class LobbyController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/{lobbyId}/players")
+    public ResponseEntity<List<PlayerResponse>> getPlayers(@PathVariable Long lobbyId) {
+        Optional<Lobby> foundLobby = lobbyRepository.findById(lobbyId);
+        if (foundLobby.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        List<Player> players = playerRepository.findByLobby(foundLobby.get());
+        List<PlayerResponse> response = new ArrayList<>();
+        for (Player player : players) {
+            PlayerResponse playerResponse = new PlayerResponse(player.getId(), player.getUser().getUsername(), player.getPlayerRole());
+            response.add(playerResponse);
+        }
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/{lobbyId}/join")
     public ResponseEntity<PlayerResponse> joinLobby(@PathVariable Long lobbyId, Authentication authentication) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
@@ -91,5 +108,25 @@ public class LobbyController {
         playerRepository.save(player);
         // 6. passenden Status zurückgeben
         return ResponseEntity.ok(new PlayerResponse(player.getId(), player.getUser().getUsername(), player.getPlayerRole()));
+    }
+
+    @PostMapping("/{lobbyId}/result")
+    public ResponseEntity<Void> saveOutcome(@PathVariable Long lobbyId, @RequestBody ReportResultRequest request) {
+        Optional<Lobby> foundLobby = lobbyRepository.findById(lobbyId);
+        if (foundLobby.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+
+        GameHistory gameHistory = new GameHistory();
+        Lobby lobby = foundLobby.get();
+        gameHistory.setLobby(lobby);
+        gameHistory.setGameOutcome(request.outcome());
+        gameHistory.setTurnCount(request.turnCount());
+        gameHistory.setEndedAt(Instant.now());
+        lobby.setStatus(LobbyStatus.FINISHED);
+        lobbyRepository.save(lobby);
+        gameHistoryRepository.save(gameHistory);
+
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }

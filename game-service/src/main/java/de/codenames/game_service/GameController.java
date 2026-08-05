@@ -2,8 +2,10 @@ package de.codenames.game_service;
 
 import de.codenames.game_service.websocket.GameWebSocketHandler;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -15,10 +17,12 @@ import java.util.Optional;
 public class GameController {
     private final GameStateService gameStateService;
     private final GameWebSocketHandler gameWebSocketHandler;
+    private final RestClient restClient;
 
     public GameController(GameStateService gameStateService, GameWebSocketHandler gameWebSocketHandler) {
         this.gameStateService = gameStateService;
         this.gameWebSocketHandler = gameWebSocketHandler;
+        this.restClient = RestClient.create("http://localhost:8081");
     }
 
     @PostMapping("/{lobbyId}/start")
@@ -65,6 +69,21 @@ public class GameController {
     public ResponseEntity<GameOutcome> reveal(@PathVariable Long lobbyId, @RequestBody RevealRequest request) {
         GameOutcome outcome = gameStateService.revealCard(lobbyId, request.position());
         gameWebSocketHandler.broadcast(lobbyId.toString());
+        if (outcome != null) {
+            Optional<GameState> foundGame = gameStateService.getGame(lobbyId);
+            if (foundGame.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            }
+            GameState gameState = foundGame.get();
+            int turnCount = gameState.getTurnCount();
+
+            restClient.post()
+                    .uri("/api/lobbies/{lobbyId}/result", lobbyId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new ReportResultRequest(outcome, turnCount))
+                    .retrieve()
+                    .toBodilessEntity();
+        }
         return ResponseEntity.ok(outcome);
     }
 }

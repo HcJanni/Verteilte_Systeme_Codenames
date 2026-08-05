@@ -1,3 +1,5 @@
 package de.codenames.auth_lobby_service.dto.request;
 
-public record LoginRequest(String username, String password) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
