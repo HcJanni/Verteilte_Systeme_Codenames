@@ -94,6 +94,19 @@ public class GameStateService {
         if (allAgentsRevealed) {
             return GameOutcome.WIN;
         }
+        // Wenn 9 Runden erreicht sind und noch nicht alle Agenten gefunden wurden, ist das Spiel verloren
+        if (gameState.getTurnCount() >= 9) {
+            return GameOutcome.LOSS;
+        }
         return null;
+    }
+
+    public void setClue(Long lobbyId, String word, int count) {
+        Optional<GameState> foundGame = getGame(lobbyId);
+        if (foundGame.isPresent()) {
+            GameState gameState = foundGame.get();
+            gameState.setCurrentClueWord(word);
+            gameState.setCurrentClueCount(count);
+        }
     }
 }

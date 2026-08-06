@@ -28,6 +28,8 @@
 </div>
 
 <script>
+    // Globale Variable für die aktuelle Spielerliste, damit der Start-Button darauf zugreifen kann
+    let currentPlayers = [];
 
     const statsContainer = document.getElementById('stats-container');
     const playersContainer = document.getElementById('players-container');
@@ -44,6 +46,16 @@
         window.location.href = "index.html"; // Zurück zum Login, falls Daten fehlen
     }
 
+    const socket = new WebSocket('ws://localhost:8082/ws/game');
+
+    socket.onmessage = function(event) {
+        // Wenn das Backend unsere Lobby-ID funkt, wechseln ALLE aufs Spielfeld!
+        if (event.data === currentLobbyId.toString()) {
+            window.location.href = "game.html";
+        }
+    };
+
+    // Rendert die Statistik ins UI
     function renderStats(stats) {
         statsContainer.innerHTML = `
             <div class="stat-item">
@@ -61,6 +73,7 @@
         `;
     }
 
+    // Rendert die Spieler ins UI
     function renderPlayers(players) {
         playersContainer.innerHTML = '';
         players.forEach(player => {
@@ -74,6 +87,7 @@
             playersContainer.appendChild(div);
         });
 
+        // Spielstart nur erlauben, wenn exakt 2 Spieler da sind
         if (players.length === 2) {
             startGameBtn.disabled = false;
             startGameBtn.style.opacity = 1;
@@ -85,6 +99,7 @@
         }
     }
 
+    // Lädt alle Daten vom Server
     async function fetchLobbyData() {
         const headers = {
             'Authorization': 'Bearer ' + token,
@@ -94,7 +109,7 @@
         try {
             roomNameSpan.innerText = `(ID: ${currentLobbyId})`;
 
-            // Hole Lobby-Statistik
+            // 1. Hole Lobby-Statistik
             const statsRes = await fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/stats`, { headers });
             if (statsRes.ok) {
                 const stats = await statsRes.json();
@@ -103,11 +118,11 @@
                 statsContainer.innerHTML = '<span style="color: red;">Fehler beim Laden der Statistik</span>';
             }
 
-            // Hole Spielerliste
+            // 2. Hole Spielerliste
             const playersRes = await fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/players`, { headers });
             if (playersRes.ok) {
-                const players = await playersRes.json();
-                renderPlayers(players);
+                currentPlayers = await playersRes.json(); // Hier die globale Variable befüllen
+                renderPlayers(currentPlayers);
             } else {
                 playersContainer.innerHTML = '<span style="color: red;">Fehler beim Laden der Spieler</span>';
             }
@@ -116,14 +131,35 @@
         }
     }
 
-    // Navigation
-    startGameBtn.addEventListener('click', () => {
-        // Später POST /api/games/{lobbyId}/start, dann:
-        window.location.href = "game.html";
+    // Navigation & Spielstart
+    startGameBtn.addEventListener('click', async () => {
+        if (currentPlayers.length === 2) {
+            const p1 = currentPlayers[0].userId;
+            const p2 = currentPlayers[1].userId;
+
+            try {
+                // Sende Start-Request an den Game-Service (Port 8082)
+                await fetch(`http://localhost:8082/api/games/${currentLobbyId}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player1Id: p1, player2Id: p2 })
+                });
+
+            } catch (err) {
+                console.error("Fehler beim Spielstart:", err);
+            }
+        }
     });
 
-    leaveRoomBtn.addEventListener('click', () => {
-        // Später DELETE Request zum Verlassen, dann:
+    // Verlassen-Button
+    leaveRoomBtn.addEventListener('click', async () => {
+        try {
+            await fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/leave`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        } catch (err) {}
+
         localStorage.removeItem('currentLobbyId');
         window.location.href = "lobby.html";
     });
@@ -131,9 +167,19 @@
     // Beim Laden der Seite Daten abrufen
     fetchLobbyData();
 
-    // Polling (optional): Aktualisiert die Spielerliste alle 3 Sekunden, um zu sehen, wenn jemand beitritt
+    // Polling: Aktualisiert die Anzeige automatisch alle 3 Sekunden
     setInterval(fetchLobbyData, 3000);
 
+    // Keepalive-Request, falls der Tab einfach geschlossen wird
+    window.addEventListener('beforeunload', () => {
+        if (currentLobbyId && token) {
+            fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/leave`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` },
+                keepalive: true
+            });
+        }
+    });
 </script>
 
 </body>

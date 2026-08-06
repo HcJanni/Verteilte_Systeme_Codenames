@@ -10,8 +10,22 @@
 
 <div class="app-container game-size">
     <div class="game-header">
-        <h2 style="margin: 0;">Lobby: <span id="lobby-name-display">Wird geladen...</span></h2>
+        <div>
+            <h2 style="margin: 0;">Spielfeld <span id="lobby-name-display"></span></h2>
+            <h3 style="margin: 5px 0 0 0; color: #555;">Runde: <span id="turn-display">0</span> / 9</h3>
+        </div>
         <button class="btn-auto btn-danger" id="leave-btn">Verlassen</button>
+    </div>
+
+    <div class="clue-section" style="text-align: center; margin-bottom: 20px; padding: 15px; background-color: #f9f9f9; border-radius: 8px; border: 1px solid #ddd;">
+        <div id="active-clue-display" style="font-size: 22px; font-weight: bold; color: #04AA6D; min-height: 30px; margin-bottom: 15px;">
+            Warte auf Hinweis...
+        </div>
+        <div>
+            <input type="text" id="clue-word" placeholder="Hinweiswort (z.B. BAUM)" style="width: 250px; display: inline-block; margin-right: 10px;">
+            <input type="number" id="clue-count" placeholder="Zahl" min="0" max="9" style="width: 80px; display: inline-block; margin-right: 10px;">
+            <button class="btn-auto" id="give-clue-btn">Tipp geben</button>
+        </div>
     </div>
 
     <div id="game-grid" class="grid-container">
@@ -20,55 +34,116 @@
 </div>
 
 <script>
-    const gameGrid = document.getElementById('game-grid');
-    const leaveBtn = document.getElementById('leave-btn');
-    document.getElementById('lobby-name-display').innerText = "Freitagsrunde (Mock)";
+    const currentLobbyId = localStorage.getItem('currentLobbyId');
+    const myUserId = localStorage.getItem('userId');
+    const token = localStorage.getItem('token');
 
-    // --- MOCK DATEN: Entspricht dem CardView-Record aus dem Backend ---
-    const mockCards = [];
-    const dummyWords = ["Apfel", "Berg", "Katze", "Draht", "Elefant", "Fluss", "Fenster", "Hammer", "Insel", "Jacke",
-        "Kerze", "Lampe", "Messer", "Nadel", "Orange", "Pferd", "Quelle", "Reifen", "Sonne", "Teller",
-        "Uhr", "Vogel", "Wald", "Zug", "Brille"];
-
-    // Wir generieren 25 Mock-Karten
-    for(let i = 0; i < 25; i++) {
-        let type = "BYSTANDER";
-        if(i < 9) type = "AGENT";
-        if(i === 24) type = "ASSASSIN";
-
-        mockCards.push({
-            word: dummyWords[i],
-            position: i,
-            revealed: false,
-            myType: type, // Das ist die Rolle, die der aktuelle Spieler (Viewer) sieht
-            otherType: null
-        });
+    if (!currentLobbyId || !myUserId) {
+        window.location.href = "index.html"; // Sicherheitshalber
     }
 
-    // Damit das Grid nicht sortiert aussieht, mischen wir die Mock-Daten (Fisher-Yates Shuffle)
-    for (let i = mockCards.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [mockCards[i], mockCards[j]] = [mockCards[j], mockCards[i]];
-        // Positionen im Array anpassen
-        mockCards[i].position = i;
-        mockCards[j].position = j;
+    // DOM Elemente
+    const gameGrid = document.getElementById('game-grid');
+    const leaveBtn = document.getElementById('leave-btn');
+    const turnDisplay = document.getElementById('turn-display');
+    const clueWordInput = document.getElementById('clue-word');
+    const clueCountInput = document.getElementById('clue-count');
+    const giveClueBtn = document.getElementById('give-clue-btn');
+    const activeClueDisplay = document.getElementById('active-clue-display');
+    document.getElementById('lobby-name-display').innerText = `(ID: ${currentLobbyId})`;
+
+    // Websocket Setup
+    const socket = new WebSocket('ws://localhost:8082/ws/game');
+
+    socket.onmessage = function(event) {
+        // Das Backend schickt die Lobby-ID als String, wenn sich dort etwas ändert
+        if (event.data === currentLobbyId.toString()) {
+            console.log("Update vom Server empfangen! Lade Spielfeld neu...");
+            loadBoard();
+        }
+    };
+
+    // Board laden (REST)
+    async function loadBoard() {
+        try {
+            // Hole das GameViewResponse Objekt vom Game-Service
+            const res = await fetch(`http://localhost:8082/api/games/${currentLobbyId}?viewerId=${myUserId}`);
+
+            if (res.ok) {
+                const gameView = await res.json();
+
+                if (!gameView || !gameView.cards) {
+                    gameGrid.innerHTML = '<h3 style="color:red;">Fehler: Das Backend liefert keine Karten. Hast du den Server wirklich neu gestartet?</h3>';
+                    return;
+                }
+
+                turnDisplay.innerText = gameView.turnCount;
+
+                // aktuellen Hinweis anzeigen
+                if (gameView.currentClueWord && gameView.currentClueCount !== null) {
+                    activeClueDisplay.innerText = `Aktueller Hinweis: ${gameView.currentClueWord.toUpperCase()} (${gameView.currentClueCount})`;
+                } else {
+                    activeClueDisplay.innerText = "Warte auf Hinweis...";
+                }
+
+                // Prüfen, ob der Partner das Spiel beendet hat (Attentäter aufgedeckt)
+                const assassinRevealed = gameView.cards.some(c => c.revealed && (c.myType === 'ASSASSIN' || c.otherType === 'ASSASSIN'));
+                if (assassinRevealed) {
+                    renderGrid(gameView.cards); // Zeige das fatale Board noch kurz an
+                    setTimeout(() => {
+                        alert('Das Spiel ist vorbei! Ein Attentäter wurde aufgedeckt.');
+                        window.location.href = "lobby.html";
+                    }, 500);
+                    return; // Stoppt weitere Ausführungen
+                }
+
+                // Prüfen, ob das Rundenlimit erreicht wurde
+                if (gameView.turnCount >= 9) {
+                    renderGrid(gameView.cards);
+                    setTimeout(() => {
+                        alert('Das Spiel ist vorbei! Rundenlimit erreicht.');
+                        window.location.href = "lobby.html";
+                    }, 500);
+                    return; // Stoppt weitere Ausführungen
+                }
+
+                // Normales Rendern, wenn das Spiel noch läuft
+                renderGrid(gameView.cards);
+            } else if (res.status === 404) {
+                gameGrid.innerHTML = '<h3>Das Spiel wurde noch nicht gestartet.</h3>';
+            }
+        } catch (err) {
+            console.error("Fehler beim Laden des Spielfelds:", err);
+        }
     }
 
     // Grid rendern
-    function renderGrid() {
+    function renderGrid(cards) {
         gameGrid.innerHTML = '';
 
-        mockCards.forEach(card => {
+        cards.forEach(card => {
             const cardDiv = document.createElement('div');
             cardDiv.className = `card type-${card.myType}`;
 
             if(card.revealed) {
                 cardDiv.classList.add('revealed');
+
+                // Wenn die Karte aufgedeckt ist, zeigen wir zur Info auch den Typ des Partners an
+                if(card.otherType) {
+                    const partnerInfo = document.createElement('div');
+                    partnerInfo.style.fontSize = '10px';
+                    partnerInfo.style.marginTop = '5px';
+                    partnerInfo.innerText = `Partner: ${card.otherType}`;
+                    cardDiv.appendChild(partnerInfo);
+                }
             }
 
-            cardDiv.innerText = card.word;
+            // Das Wort als Text-Node einfügen
+            const wordSpan = document.createElement('span');
+            wordSpan.innerText = card.word;
+            cardDiv.insertBefore(wordSpan, cardDiv.firstChild);
 
-            // Klick-Event für Reveal-Request
+            // Klick-Event für das Aufdecken
             cardDiv.addEventListener('click', () => {
                 if(!card.revealed) {
                     revealCard(card.position);
@@ -79,23 +154,92 @@
         });
     }
 
-    // Karte aufdecken (Simuliert den POST /api/games/{lobbyId}/reveal Request)
-    function revealCard(position) {
-        console.log(`Sende Reveal-Request für Position: ${position}`);
-        // Mock-Logik: Wir ändern den Zustand lokal
-        mockCards[position].revealed = true;
-        renderGrid();
+    // Karte aufdecken
+    async function revealCard(position) {
+        try {
+            const res = await fetch(`http://localhost:8082/api/games/${currentLobbyId}/reveal`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ position: position })
+            });
 
-        // Später: fetch('/api/games/1/reveal', { method: 'POST', body: JSON.stringify({position}) ... })
+            if (res.ok) {
+                const text = await res.text();
+
+                // Nur wenn wirklich Text da ist (nicht leer/null), werten wir das Spielende aus
+                if (text) {
+                    const outcome = JSON.parse(text);
+
+                    if (outcome === 'WIN') {
+                        setTimeout(() => {
+                            alert('Glückwunsch! Ihr habt alle Agenten gefunden!');
+                            window.location.href = "lobby.html";
+                        }, 100);
+                    } else if (outcome === 'LOSS') {
+                        setTimeout(() => {
+                            alert('Fehlschlag! Ihr habt das Rundenlimit erreicht.');
+                            window.location.href = "lobby.html";
+                        }, 100);
+                    } else if (outcome === 'ASSASSIN_LOSS') {
+                        setTimeout(() => {
+                            alert('Oh nein! Ein Attentäter wurde aufgedeckt! Spiel verloren.');
+                            window.location.href = "lobby.html";
+                        }, 100);
+                    }
+                } else {
+                    // Wenn 'null' zurückkam, geht das Spiel normal weiter
+                    loadBoard();
+                }
+            }
+        } catch (err) {
+            console.error("Fehler beim Aufdecken:", err);
+        }
     }
 
+    // Hinweis geben
+    giveClueBtn.addEventListener('click', async () => {
+        const word = clueWordInput.value.trim();
+        const count = parseInt(clueCountInput.value, 10);
+
+        if (!word || isNaN(count)) {
+            alert("Bitte ein Wort und eine Zahl eingeben!");
+            return;
+        }
+
+        try {
+            const res = await fetch(`http://localhost:8082/api/games/${currentLobbyId}/clue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word: word, count: count })
+            });
+
+            if (res.ok) {
+                // Eingabefelder nach dem Senden leeren
+                clueWordInput.value = '';
+                clueCountInput.value = '';
+                // Das Neuladen des Boards wird automatisch durch den WebSocket-Broadcast übernommen!
+            }
+        } catch (err) {
+            console.error("Fehler beim Senden des Hinweises:", err);
+        }
+    });
+
     // Spiel verlassen
-    leaveBtn.addEventListener('click', () => {
+    leaveBtn.addEventListener('click', async () => {
+        // Meldet den Spieler beim Verlassen ab
+        try {
+            await fetch(`http://localhost:8081/api/lobbies/${currentLobbyId}/leave`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        } catch (err) {}
+
+        localStorage.removeItem('currentLobbyId');
         window.location.href = "lobby.html";
     });
 
-    // Initiales Rendern
-    renderGrid();
+    // Initialer Aufruf
+    loadBoard();
 </script>
 
 </body>

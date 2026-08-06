@@ -101,6 +101,11 @@ public class LobbyController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
         Lobby lobby = foundLobby.get();
+        // Lobby voll?
+        List<Player> existingPlayers = playerRepository.findByLobby(lobby);
+        if (existingPlayers.size() >= 2) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         // 4. Neuen Player bauen: user, lobby, team=null, role=null
         Player player = new Player();
         player.setUser(user);
@@ -130,6 +135,31 @@ public class LobbyController {
         gameHistoryRepository.save(gameHistory);
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @DeleteMapping("/{lobbyId}/leave")
+    public ResponseEntity<Void> leaveLobby(@PathVariable Long lobbyId, Authentication authentication) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+
+        // 1. Lobby finden
+        Optional<Lobby> foundLobby = lobbyRepository.findById(lobbyId);
+        if (foundLobby.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // 2. Alle Spieler dieser Lobby abrufen
+        List<Player> players = playerRepository.findByLobby(foundLobby.get());
+
+        // 3. Den aktuellen Spieler suchen und aus der Datenbank löschen
+        for (Player player : players) {
+            if (player.getUser().getId().equals(userId)) {
+                playerRepository.delete(player);
+                break; // Schleife abbrechen, sobald der Spieler gelöscht wurde
+            }
+        }
+
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{lobbyId}/stats")

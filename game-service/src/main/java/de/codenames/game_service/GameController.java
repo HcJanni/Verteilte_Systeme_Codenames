@@ -30,11 +30,12 @@ public class GameController {
     @PostMapping("/{lobbyId}/start")
     public ResponseEntity<Void> startGame(@PathVariable Long lobbyId, @RequestBody StartGameRequest request) {
         gameStateService.createGame(lobbyId, request.player1Id(), request.player2Id());
+        gameWebSocketHandler.broadcast(lobbyId.toString());
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{lobbyId}")
-    public ResponseEntity<List<CardView>> getGameView(@PathVariable Long lobbyId, @RequestParam Long viewerId) {
+    public ResponseEntity<GameViewResponse> getGameView(@PathVariable Long lobbyId, @RequestParam Long viewerId) {
         Optional<GameState> foundGame = gameStateService.getGame(lobbyId);
         if (foundGame.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
@@ -64,7 +65,7 @@ public class GameController {
             CardView cardView = new CardView(card.getWord(), card.getPosition(), card.isRevealed(), myType, otherTypeToShow);
             result.add(cardView);
         }
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(new GameViewResponse(result, gameState.getTurnCount(), gameState.getCurrentClueWord(), gameState.getCurrentClueCount()));
     }
 
     @PostMapping("/{lobbyId}/reveal")
@@ -87,5 +88,13 @@ public class GameController {
                     .toBodilessEntity();
         }
         return ResponseEntity.ok(outcome);
+    }
+
+    @PostMapping("/{lobbyId}/clue")
+    public ResponseEntity<Void> giveClue(@PathVariable Long lobbyId, @RequestBody ClueRequest request) {
+        gameStateService.setClue(lobbyId, request.word(), request.count());
+        // Wie beim Aufdecken senden wir einen Broadcast, damit das Frontend sich aktualisiert
+        gameWebSocketHandler.broadcast(lobbyId.toString());
+        return ResponseEntity.ok().build();
     }
 }

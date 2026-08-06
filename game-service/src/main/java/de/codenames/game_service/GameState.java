@@ -8,6 +8,8 @@ public class GameState {
     private long player2Id;
     private List<Card> cards;
     private int turnCount;
+    private String currentClueWord;
+    private Integer currentClueCount;
 
     public long getLobbyId() {
         return lobbyId;
@@ -47,5 +49,18 @@ public class GameState {
 
     public void setTurnCount(int turnCount) {
         this.turnCount = turnCount;
+    }
+
+    public String getCurrentClueWord() {
+        return currentClueWord;
+    }
+    public void setCurrentClueWord(String currentClueWord) {
+        this.currentClueWord = currentClueWord;
+    }
+    public Integer getCurrentClueCount() {
+        return currentClueCount;
+    }
+    public void setCurrentClueCount(Integer currentClueCount) {
+        this.currentClueCount = currentClueCount;
     }
 }
